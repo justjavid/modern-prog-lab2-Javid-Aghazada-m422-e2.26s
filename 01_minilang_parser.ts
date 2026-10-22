@@ -34,7 +34,7 @@
 // compare = sum [ ">" sum ] ;
 // sum = term { ( "+" | "-" ) term } ;
 // term = primary { "*" primary } ;
-// primary = INT | STRING | IDENT | "(" expr ")" ;
+// primary = INT | STRING | IDENT | "true" | "false" | "(" expr ")" ;
 //
 //  ---------- Grammar (EBNF). Edit this first in every step. [for home assignments] ----------
 // expr    = "if" expr "then" expr "else" expr | compare ;
@@ -50,6 +50,7 @@
 type Expr =
   | { kind: "int"; value: number }
   | { kind: "str"; value: string }
+  | { kind: "bool"; value: boolean }
   | { kind: "var"; name: string }
   | { kind: "add"; left: Expr; right: Expr }
   | { kind: "subtract"; left: Expr; right: Expr }
@@ -72,7 +73,7 @@ const RULES: [string, RegExp][] = [
   ["(", /\(/y],
   [")", /\)/y],
 ];
-const KW = new Set(["if", "then", "else"]);
+const KW = new Set(["if", "then", "else", "true", "false"]);
 
 function tokenize(src: string): Token[] {
   const out: Token[] = [];
@@ -173,7 +174,7 @@ function parseSum(p: Parser): Expr {
   return left;
 }
 
-// primary = INT | STRING | IDENT | "(" expr ")" ;
+// primary = INT | STRING | IDENT | "true" | "false" | "(" expr ")" ;
 function parsePrimary(p: Parser): Expr {
   const t = p.next();
   switch (t.kind) {
@@ -181,6 +182,10 @@ function parsePrimary(p: Parser): Expr {
       return { kind: "int", value: Number(t.text) };
     case "str":
       return { kind: "str", value: t.text.slice(1, -1) };
+    case "true":
+      return { kind: "bool", value: true };
+    case "false":
+      return { kind: "bool", value: false };
     case "ident":
       return { kind: "var", name: t.text };
     case "(": {
@@ -208,6 +213,8 @@ function check(e: Expr, env: Env): Type {
       return "int";
     case "str": // T-Str
       return "string";
+    case "bool": // T-Bool
+      return "bool";
     case "var": {
       // T-Var
       const t = env[e.name];
