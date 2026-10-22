@@ -31,7 +31,7 @@
 
 // ---------- Grammar (EBNF). Edit this first in every step. [for core assignments] ----------
 // expr    = "if" expr "then" expr "else" expr | compare ;
-// compare = sum [ ">" sum ] ;
+// compare = sum [ ( ">" | ">=" | "==" ) sum ] ;
 // sum = term { ( "+" | "-" ) term } ;
 // term = unary { "*" unary } ;
 // unary = "-" unary | primary ;
@@ -58,6 +58,8 @@ type Expr =
   | { kind: "subtract"; left: Expr; right: Expr }
   | { kind: "mul"; left: Expr; right: Expr }
   | { kind: "gt"; left: Expr; right: Expr }
+  | { kind: "ge"; left: Expr; right: Expr }
+  | { kind: "eq"; left: Expr; right: Expr }
   | { kind: "if"; cond: Expr; then: Expr; else: Expr };
 
 // ---------- Lexer: token rules (slide 7) and the tokenizer loop (slide 8) ----------
@@ -71,7 +73,9 @@ const RULES: [string, RegExp][] = [
   ["+", /\+/y],
   ["-", /\-/y],
   ["*", /\*/y],
+  [">=", />=/y], // before ">", or ">=" lexes as ">" then "="
   [">", />/y],
+  ["==", /==/y],
   ["(", /\(/y],
   [")", /\)/y],
 ];
@@ -142,12 +146,22 @@ function parseExpr(p: Parser): Expr {
   return { kind: "if", cond, then: thenE, else: parseExpr(p) };
 }
 
-// compare = sum [ ">" sum ] ;
+// compare = sum [ ( ">" | ">=" | "==" ) sum ] ;
 function parseCompare(p: Parser): Expr {
   const left = parseSum(p);
-  if (p.peek().kind !== ">") return left;
-  p.next();
-  return { kind: "gt", left, right: parseSum(p) };
+  switch (p.peek().kind) {
+    case ">":
+      p.next();
+      return { kind: "gt", left, right: parseSum(p) };
+    case ">=":
+      p.next();
+      return { kind: "ge", left, right: parseSum(p) };
+    case "==":
+      p.next();
+      return { kind: "eq", left, right: parseSum(p) };
+    default:
+      return left;
+  }
 }
 
 // term = unary { "*" unary } ;
@@ -266,6 +280,22 @@ function check(e: Expr, env: Env): Type {
       const r = check(e.right, env);
       if (l !== "int" || r !== "int")
         throw new CheckError(`'>' needs int > int, got ${l} > ${r}`);
+      return "bool";
+    }
+    case "ge": {
+      // T-Ge
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== "int" || r !== "int")
+        throw new CheckError(`'>=' needs int >= int, got ${l} >= ${r}`);
+      return "bool";
+    }
+    case "eq": {
+      // T-Eq: both sides must have the same type
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== r)
+        throw new CheckError(`'==' needs operands of the same type, got ${l} == ${r}`);
       return "bool";
     }
     case "if": {
