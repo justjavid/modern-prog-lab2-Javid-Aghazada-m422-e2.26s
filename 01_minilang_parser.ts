@@ -33,7 +33,8 @@
 // expr    = "if" expr "then" expr "else" expr | compare ;
 // compare = sum [ ">" sum ] ;
 // sum = term { ( "+" | "-" ) term } ;
-// term = primary { "*" primary } ;
+// term = unary { "*" unary } ;
+// unary = "-" unary | primary ;
 // primary = INT | STRING | IDENT | "true" | "false" | "(" expr ")" ;
 //
 //  ---------- Grammar (EBNF). Edit this first in every step. [for home assignments] ----------
@@ -52,6 +53,7 @@ type Expr =
   | { kind: "str"; value: string }
   | { kind: "bool"; value: boolean }
   | { kind: "var"; name: string }
+  | { kind: "neg"; operand: Expr }
   | { kind: "add"; left: Expr; right: Expr }
   | { kind: "subtract"; left: Expr; right: Expr }
   | { kind: "mul"; left: Expr; right: Expr }
@@ -148,14 +150,21 @@ function parseCompare(p: Parser): Expr {
   return { kind: "gt", left, right: parseSum(p) };
 }
 
-// term = primary { "*" primary } ;
+// term = unary { "*" unary } ;
 function parseTerm(p: Parser): Expr {
-  let left = parsePrimary(p);
+  let left = parseUnary(p);
   while (p.peek().kind === "*") {
     p.next();
-    left = { kind: "mul", left, right: parsePrimary(p) };
+    left = { kind: "mul", left, right: parseUnary(p) };
   }
   return left;
+}
+
+// unary = "-" unary | primary ;
+function parseUnary(p: Parser): Expr {
+  if (p.peek().kind !== "-") return parsePrimary(p);
+  p.next();
+  return { kind: "neg", operand: parseUnary(p) };
 }
 
 // sum = primary { "+" primary } ; old rule
@@ -230,6 +239,12 @@ function check(e: Expr, env: Env): Type {
       throw new CheckError(
         `'+' needs int + int or string + string, got ${l} + ${r}`,
       );
+    }
+    case "neg": {
+      // T-Neg
+      const t = check(e.operand, env);
+      if (t !== "int") throw new CheckError(`'-' needs -int, got -${t}`);
+      return "int";
     }
     case "subtract": {
       // T-Sub
